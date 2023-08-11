@@ -1,0 +1,5 @@
+@EndUserText.label: 'Sales Order Service Definition'
+define service Y27D_SD_SALES_ORDER {
+  expose Y27_C_SALES_HEAD as soHead;
+  expose Y27_C_SALES_ITEM as so_Item;
+}

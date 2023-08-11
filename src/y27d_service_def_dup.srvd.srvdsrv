@@ -1,0 +1,5 @@
+@EndUserText.label: 'Service Definition'
+define service Y27D_SERVICE_DEF_DUP {
+  expose Y27_C_SALES_HEAD_dup as soHead;
+  expose Y27_C_SALES_ITEM_dup as so_Item;
+}

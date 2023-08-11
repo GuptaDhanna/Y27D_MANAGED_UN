@@ -1,0 +1,67 @@
+unmanaged implementation in class zbp_27_c_sales_head unique;
+//strict ( 2 ); //Uncomment this line in order to enable strict mode 2. The strict mode has two variants (strict(1), strict(2)) and is prerequisite to be future proof regarding syntax and to be able to release your BO.
+//with draft;
+define behavior for Y27_C_SALES_HEAD alias soHead
+//persistent table y27d_db_vbak
+//late numbering
+//draft table y27_draft_head
+//lock master total etag last_changed
+authorization master ( instance )
+//etag master last_changed
+{
+  create(precheck);
+  update(features : instance);
+  delete(features : instance);
+  association _soItem { create(features : instance); }
+  field ( readonly ) sales_doc_num,block_status_msg,date_created,person_created,total_cost;
+  action(features : instance) blockOrder result[1] $self;
+  action(features : instance) unblockOrder result[1] $self;
+//  validation Validate on save { field
+  mapping for y27d_db_vbak control Y27_C_SALES_HEAD corresponding{
+
+    sales_doc_num = vbeln;
+    block_status = faksk;
+    sales_dist = vtweg;
+    sales_div = spart;
+    sales_org = vkorg;
+    total_cost = netwr;
+    cost_currency = waerk;
+    person_created = ernam;
+    date_created = erdat;
+    last_changed = last_changed_timestamp;
+
+  }
+
+}
+
+define behavior for Y27_C_SALES_ITEM  alias soItem
+//late numbering
+//persistent table y27d_db_vbap
+//lock dependent by _soHead
+//draft table y27d_draft_item
+authorization dependent by _soHead
+//etag master last_changed
+{
+  create;
+  update;
+  delete;
+  field ( readonly ) sales_doc_num, total_item_cost;
+  association _soHead;
+//  determination determineTotalPrice on modify  { field total_item_cost; update; }
+//  side effects { field quanity affects field total_item_cost; }
+  mapping for y27d_db_vbap control Y27_C_SALES_ITEM corresponding{
+
+        sales_doc_num = vbeln;
+        item_position = posnr;
+        cost_currency = waerk;
+        mat_desc = arktx;
+        mat_num = matnr;
+        quanity = kpein;
+        total_item_cost = netwr;
+        unit_cost = netpr;
+        unit = kmein;
+        last_changed = last_changed_timestamp;
+
+     }
+
+}
