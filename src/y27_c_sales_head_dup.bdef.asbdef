@@ -10,18 +10,18 @@ lock master
 authorization master ( instance )
 //etag master last_changed
 {
-//  draft action edit;
-//  draft action Resume;
-//  draft action Activate;
-//  draft action Discard;
-//  draft determine action Prepare;
+  //  draft action edit;
+  //  draft action Resume;
+  //  draft action Activate;
+  //  draft action Discard;
+  //  draft determine action Prepare;
   create;
   update ( features : instance );
   delete ( features : instance );
   association _soItem { create ( features : instance ); }
   //  field(numbering : managed,readonly ) sales_doc_num;
   field ( readonly ) sales_doc_num, block_status_msg, date_created, person_created;
-  //  side effects { field total_cost affects $self; }
+  side effects { field total_cost affects field _soItem.total_item_cost; }
   action ( features : instance ) blockOrder result [1] $self;
   action ( features : instance ) unblockOrder result [1] $self;
   mapping for y27d_db_vbak control y27_c_sales_head_dup corresponding
@@ -53,10 +53,13 @@ authorization dependent by _soHead
   delete;
   field ( readonly ) sales_doc_num;
   association _soHead;
-  determination determineTotalPrice on modify { field unit_cost; create; }
-  //  determination determineTotalPrice on modify { field total_item_cost; update; }
-  determination determineHTotalPrice on modify { field total_item_cost; update; }
-  side effects { field quanity affects field total_item_cost; }
+  //  determination determineTotalPrice on save { field unit_cost;field quanity; }
+  side effects
+  { field unit_cost affects field total_item_cost; field quanity affects field total_item_cost;
+    field total_item_cost affects field _soHead.total_cost; }
+  determination determineTotalPrice on modify { field unit_cost; field quanity; }
+  //    determination determineTotalPrice on modify { field total_item_cost; update; }
+  determination determineHTotalPrice on modify { field total_item_cost; }
   mapping for y27d_db_vbap control y27_c_sales_item_dup corresponding
     {
       sales_doc_num   = vbeln;
@@ -70,6 +73,7 @@ authorization dependent by _soHead
       unit            = kmein;
       last_changed    = last_changed_timestamp;
     }
+
 
 
 

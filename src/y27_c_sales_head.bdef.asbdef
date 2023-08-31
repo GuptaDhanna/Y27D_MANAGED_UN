@@ -5,7 +5,7 @@ define behavior for Y27_C_SALES_HEAD alias soHead
 //persistent table y27d_db_vbak
 //late numbering
 //draft table y27_draft_head
-//lock master total etag last_changed
+lock master
 authorization master ( instance )
 //etag master last_changed
 {

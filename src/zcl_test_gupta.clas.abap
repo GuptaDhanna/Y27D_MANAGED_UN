@@ -8,7 +8,10 @@ CLASS zcl_test_gupta DEFINITION
 ENDCLASS.
 
 
-CLASS zcl_test_gupta IMPLEMENTATION.
+
+CLASS ZCL_TEST_GUPTA IMPLEMENTATION.
+
+
   METHOD select.
     DATA lt_material  TYPE STANDARD TABLE OF y27d_db_vbak.
     DATA lt_constants TYPE STANDARD TABLE OF zconstants.

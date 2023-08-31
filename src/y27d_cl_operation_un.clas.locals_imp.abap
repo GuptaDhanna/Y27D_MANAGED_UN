@@ -23,7 +23,8 @@ CLASS y27d_cl_buffer DEFINITION FINAL CREATE PRIVATE.
     METHODS buffer_so_item_create IMPORTING it_so_item TYPE tt_soi.
 
     METHODS buffer_so_head_update IMPORTING it_so_head TYPE tt_soh
-                                            it_so_cont TYPE zif_structure=>tt_control.
+                                            it_so_cont TYPE zif_structure=>tt_control
+                                            iv_x       TYPE char1 OPTIONAL.
 
     METHODS buffer_so_item_update IMPORTING it_so_item TYPE tt_soi
                                             it_so_cont TYPE zif_structure=>tt_control_item.
@@ -110,6 +111,13 @@ CLASS y27d_cl_buffer IMPLEMENTATION.
               READ TABLE lt_struc_des INTO l_component INDEX lv_flag_cont.
               ASSIGN COMPONENT l_component-name OF STRUCTURE <fs_so_all> TO FIELD-SYMBOL(<fs_db>).
               ASSIGN COMPONENT l_component-name OF STRUCTURE <fs_so_head> TO FIELD-SYMBOL(<fs_upd>).
+              IF l_component-name EQ 'FAKSK'.
+                IF <fs_upd> EQ 1.
+                  ASSIGN abap_true TO <fs_upd>.
+                ELSEIF <fs_upd> EQ 3.
+                  ASSIGN abap_false TO <fs_upd>.
+                ENDIF.
+              ENDIF.
 
               <fs_db> = <fs_upd>.
               <fs_so_all>-last_changed_timestamp = lv_time_stamp.

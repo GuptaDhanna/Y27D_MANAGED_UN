@@ -29,28 +29,15 @@ CLASS lsc_y27_c_sales_head_dup IMPLEMENTATION.
                                                      EXCEPT vbeln erdat ernam ) ) ) ).
     ENDIF.
     IF update-sohead IS NOT INITIAL.
-    DATA ls_so_cont TYPE zif_structure=>ts_control.
-    DATA lt_so_cont TYPE zif_structure=>tt_control.
+      DATA ls_so_cont TYPE zif_structure=>ts_control.
+      DATA:lt_so_cont    TYPE zif_structure=>tt_control,
+           lv_total_cost TYPE y27d_db_vbak-netwr.
 
-    GET TIME STAMP FIELD FINAL(lv_time).
-    LOOP AT update-sohead ASSIGNING FIELD-SYMBOL(<fs_entity>).
+      GET TIME STAMP FIELD FINAL(lv_time).
+      LOOP AT update-sohead ASSIGNING FIELD-SYMBOL(<fs_entity>).
 
-      ls_so_head = CORRESPONDING #( <fs_entity> MAPPING
-                   erdat = date_created
-                   ernam = person_created
-                   faksk = block_status
-                   netwr = total_cost
-                   spart = sales_div
-                   vbeln = sales_doc_num
-                   vkorg = sales_org
-                   waerk = cost_currency
-                   vtweg = sales_dist ).
-      ls_so_head-last_changed_timestamp = lv_time.
-
-      APPEND ls_so_head TO lt_so_head.
-
-      ls_so_cont = CORRESPONDING #( <fs_entity>-%control MAPPING
-                                    erdat = date_created
+        ls_so_head = CORRESPONDING #( <fs_entity> MAPPING
+                     erdat = date_created
                      ernam = person_created
                      faksk = block_status
                      netwr = total_cost
@@ -58,15 +45,51 @@ CLASS lsc_y27_c_sales_head_dup IMPLEMENTATION.
                      vbeln = sales_doc_num
                      vkorg = sales_org
                      waerk = cost_currency
-                     vtweg = sales_dist
-                     last_changed_timestamp = last_changed ).
-      ls_so_cont-vbeln_id = ls_so_head-vbeln.
-      APPEND ls_so_cont TO lt_so_cont.
+                     vtweg = sales_dist ).
+        ls_so_head-last_changed_timestamp = lv_time.
 
-    ENDLOOP.
-    y27d_cl_operation_un=>get_instance( )->buffer_so_head_update( it_so_h = lt_so_head
-                                                                  it_so_c = lt_so_cont ).
+        APPEND ls_so_head TO lt_so_head.
 
+        ls_so_cont = CORRESPONDING #( <fs_entity>-%control MAPPING
+                                      erdat = date_created
+                       ernam = person_created
+                       faksk = block_status
+                       netwr = total_cost
+                       spart = sales_div
+                       vbeln = sales_doc_num
+                       vkorg = sales_org
+                       waerk = cost_currency
+                       vtweg = sales_dist
+                       last_changed_timestamp = last_changed ).
+        ls_so_cont-vbeln_id = ls_so_head-vbeln.
+        APPEND ls_so_cont TO lt_so_cont.
+
+      ENDLOOP.
+      IF lt_so_head IS NOT INITIAL.
+        SELECT * FROM y27d_db_vbap FOR ALL ENTRIES IN @lt_so_head
+        WHERE vbeln EQ @lt_so_head-vbeln
+        INTO TABLE @DATA(lt_so_vbap).
+        IF lt_so_vbap IS NOT INITIAL.
+          READ ENTITIES OF y27_c_sales_head_dup IN LOCAL MODE
+              ENTITY soItem
+              FIELDS ( sales_doc_num item_position quanity unit_cost ) WITH CORRESPONDING #( lt_so_head MAPPING sales_doc_num = vbeln )
+              RESULT DATA(lt_so_item).
+          LOOP AT lt_so_item ASSIGNING FIELD-SYMBOL(<fs_so_item>).
+            lt_so_vbap[ vbeln = <fs_so_item>-sales_doc_num
+                        posnr = <fs_so_item>-item_position ]-netwr = <fs_so_item>-total_item_cost.
+          ENDLOOP.
+          LOOP AT lt_so_vbap ASSIGNING FIELD-SYMBOL(<fs_so_vbap>).
+            lv_total_cost = lv_total_cost + <fs_so_vbap>-netwr.
+            DATA(lv_vbeln) = <fs_so_vbap>-vbeln.
+          ENDLOOP.
+          lt_so_head[ vbeln = lv_vbeln ]-netwr = lv_total_cost.
+          lt_so_cont[ vbeln_id = lv_vbeln ]-netwr = 01.
+        ENDIF.
+      ENDIF.
+      y27d_cl_operation_un=>get_instance( )->buffer_so_head_update( it_so_h = lt_so_head
+                                                                    it_so_c = lt_so_cont ).
+
+      y27d_cl_operation_un=>get_instance(  )->save(  ).
 
     ENDIF.
     IF delete IS NOT INITIAL.
@@ -86,10 +109,13 @@ CLASS lhc_y27_c_sales_item_dup DEFINITION INHERITING FROM cl_abap_behavior_handl
 
   PRIVATE SECTION.
 
+*    METHODS determineTotalPrice FOR DETERMINE ON SAVE
+*      IMPORTING keys FOR Y27_C_SALES_ITEM_dup~determineTotalPrice.
     METHODS determineTotalPrice FOR DETERMINE ON MODIFY
       IMPORTING keys FOR Y27_C_SALES_ITEM_dup~determineTotalPrice.
     METHODS determineHTotalPrice FOR DETERMINE ON MODIFY
-      IMPORTING keys FOR soItem~determineHTotalPrice.
+      IMPORTING keys FOR Y27_C_SALES_ITEM_dup~determineHTotalPrice.
+
 
 ENDCLASS.
 
@@ -99,7 +125,7 @@ CLASS lhc_y27_c_sales_item_dup IMPLEMENTATION.
 
     READ ENTITIES OF y27_c_sales_head_dup IN LOCAL MODE
     ENTITY soItem
-    FIELDS ( quanity ) WITH CORRESPONDING #( keys )
+    FIELDS ( quanity unit_cost ) WITH CORRESPONDING #( keys )
     RESULT DATA(lt_so_item).
     IF lt_so_item IS NOT INITIAL.
       LOOP AT lt_so_item ASSIGNING FIELD-SYMBOL(<fs_so_item>).
@@ -196,39 +222,61 @@ CLASS lhc_Y27_C_SALES_HEAD_dup IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD blockOrder.
-    DATA lt_so_h TYPE STANDARD TABLE OF y27d_db_vbak.
+*    DATA lt_so_h TYPE STANDARD TABLE OF y27d_db_vbak.
 
-    LOOP AT keys ASSIGNING FIELD-SYMBOL(<fs_block>).
-
-      lt_so_h = VALUE #( BASE lt_so_h
-                         ( vbeln = <fs_block>-sales_doc_num
-                           faksk = abap_true ) ).
-
+*    LOOP AT keys ASSIGNING FIELD-SYMBOL(<fs_block>).
+*
+*      lt_so_h = VALUE #( BASE lt_so_h
+*                         ( vbeln = <fs_block>-sales_doc_num
+*                           faksk = abap_true ) ).
+*
+*    ENDLOOP.
+    READ ENTITIES OF Y27_C_SALES_HEAD_dup IN LOCAL MODE
+    ENTITY Sohead
+    FIELDS ( block_status block_status_msg  ) WITH CORRESPONDING #( keys )
+    RESULT DATA(lt_so_head).
+    LOOP AT lt_so_head ASSIGNING FIELD-SYMBOL(<fs_so_head>).
+      MODIFY ENTITIES OF Y27_C_SALES_HEAD_dup IN LOCAL MODE
+     ENTITY Sohead
+     UPDATE
+     FIELDS ( block_status ) WITH VALUE #( ( %tky = <fs_so_head>-%tky
+                                            block_status = 1 ) ).
     ENDLOOP.
-    y27d_cl_operation_un=>get_instance( )->buffer_so_order_block( it_so_h = lt_so_h
-                                                                  iv_para = 'X' ).
-    result = VALUE #( FOR ls_so_h1 IN lt_so_h
-                      ( sales_doc_num           = ls_so_h1-vbeln
-                        %param-sales_doc_num    = ls_so_h1-vbeln
-                        %param-block_status_msg = ls_so_h1-faksk ) ).
+*    y27d_cl_operation_un=>get_instance( )->buffer_so_order_block( it_so_h = lt_so_h
+*                                                                  iv_para = 'X' ).
+    result = VALUE #( FOR ls_so_h1 IN lt_so_head
+                      ( sales_doc_num           = ls_so_h1-sales_doc_num
+                        %param-sales_doc_num    = ls_so_h1-sales_doc_num
+                        %param-block_status_msg = ls_so_h1-block_status ) ).
   ENDMETHOD.
 
   METHOD unblockOrder.
-    DATA lt_so_h TYPE STANDARD TABLE OF y27d_db_vbak.
+*    DATA lt_so_h TYPE STANDARD TABLE OF y27d_db_vbak.
 
-    LOOP AT keys ASSIGNING FIELD-SYMBOL(<fs_block>).
-
-      lt_so_h = VALUE #( BASE lt_so_h
-                         ( vbeln = <fs_block>-sales_doc_num
-                           faksk = abap_true ) ).
-
+*    LOOP AT keys ASSIGNING FIELD-SYMBOL(<fs_block>).
+*
+*      lt_so_h = VALUE #( BASE lt_so_h
+*                         ( vbeln = <fs_block>-sales_doc_num
+*                           faksk = abap_true ) ).
+*
+*    ENDLOOP.
+    READ ENTITIES OF Y27_C_SALES_HEAD_dup IN LOCAL MODE
+   ENTITY Sohead
+   FIELDS ( block_status block_status_msg  ) WITH CORRESPONDING #( keys )
+   RESULT DATA(lt_so_head).
+    LOOP AT lt_so_head ASSIGNING FIELD-SYMBOL(<fs_so_head>).
+      MODIFY ENTITIES OF Y27_C_SALES_HEAD_dup IN LOCAL MODE
+     ENTITY Sohead
+     UPDATE
+     FIELDS ( block_status ) WITH VALUE #( ( %tky = <fs_so_head>-%tky
+                                            block_status = 3 ) ).
     ENDLOOP.
-    y27d_cl_operation_un=>get_instance( )->buffer_so_order_block( it_so_h = lt_so_h
-                                                                  iv_para = ' ' ).
-    result = VALUE #( FOR ls_so_h1 IN lt_so_h
-                      ( sales_doc_num           = ls_so_h1-vbeln
-                        %param-sales_doc_num    = ls_so_h1-vbeln
-                        %param-block_status_msg = ls_so_h1-faksk ) ).
+*    y27d_cl_operation_un=>get_instance( )->buffer_so_order_block( it_so_h = lt_so_h
+*                                                                  iv_para = ' ' ).
+    result = VALUE #( FOR ls_so_h1 IN lt_so_head
+                      ( sales_doc_num           = ls_so_h1-sales_doc_num
+                        %param-sales_doc_num    = ls_so_h1-sales_doc_num
+                        %param-block_status_msg = ls_so_h1-block_status ) ).
   ENDMETHOD.
 
 ENDCLASS.
